@@ -1,0 +1,18 @@
+[General]
+test_mode = True
+
+[Rutas]
+carpeta_descarga = C:\Ruta\A\Descargas
+carpeta_original = C:\Ruta\A\Original
+carpeta_enviados = C:\Ruta\A\Enviados
+
+[SFTP]
+host = sftp.cliente-ejemplo.com
+port = 22
+usuario = tu_usuario
+contrasena = tu_contrasena
+carpeta_destino = .
+
+[Fecha]
+usar_fecha_manual = False
+fecha_manual = 2026-01-01

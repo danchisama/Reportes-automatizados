@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Project Specific
+config/config.ini
+config/*.json
+.env
+data/
+logs/
+
+# IDE
+.vscode/
+.idea/
