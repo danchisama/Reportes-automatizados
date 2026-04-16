@@ -1,6 +1,7 @@
 import os
 import base64
 import logging
+import uuid
 from datetime import datetime, timedelta
 
 from googleapiclient.discovery import build
@@ -41,17 +42,19 @@ def configurar_logging(ruta_log):
             filename=ruta_log,
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
-            force=True
+            force=True,
+            encoding='utf-8'
         )
     except PermissionError:
         timestamp = datetime.now().strftime('%H%M%S')
         ruta_alt = ruta_log.replace('.log', f'_{timestamp}.log')
-        print(f"⚠️ El archivo de log {ruta_log} está bloqueado. Usando {ruta_alt}")
+        print(f"[!] El archivo de log {ruta_log} está bloqueado. Usando {ruta_alt}")
         logging.basicConfig(
             filename=ruta_alt,
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
-            force=True
+            force=True,
+            encoding='utf-8'
         )
 
 configurar_logging(LOG_PATH)
@@ -152,7 +155,7 @@ def descargar_correos(query, carpeta_destino, tipo, es_adjunto=True):
                         continue    
 
                     attachment_id = part['body'].get('attachmentId')
-                    clave_unica = f"{clave_base}|{attachment_id}"
+                    clave_unica = f"{clave_base}|{filename}"
 
                     if clave_unica in descargados:
                         logging.info(f'Adjunto ya descargado: {filename}')
@@ -164,7 +167,7 @@ def descargar_correos(query, carpeta_destino, tipo, es_adjunto=True):
 
                     file_data = base64.urlsafe_b64decode(attachment['data'])
                     timestamp = fecha_correo.strftime('%Y%m%d_%H%M%S%f')
-                    nuevo_nombre = f"{timestamp}_{filename}"
+                    nuevo_nombre = f"{timestamp}_{uuid.uuid4().hex[:6]}_{filename}"
                     ruta_archivo = os.path.join(carpeta_destino, nuevo_nombre)
 
                     with open(ruta_archivo, 'wb') as f:
@@ -173,7 +176,7 @@ def descargar_correos(query, carpeta_destino, tipo, es_adjunto=True):
                     guardar_descargados(clave_unica)
                     descargados.add(clave_unica)
                     logging.info(f'{tipo} descargado: {ruta_archivo}')
-                    print(f'✅ Adjunto descargado: {filename}')
+                    print(f'[OK] Adjunto descargado: {filename}')
             else:
                 if clave_base in descargados:
                     logging.info(f'Correo ya procesado: {clave_base}')
@@ -205,7 +208,7 @@ def descargar_correos(query, carpeta_destino, tipo, es_adjunto=True):
                     guardar_descargados(clave_base)
                     descargados.add(clave_base)
                     logging.info(f'{tipo} guardado: {ruta_archivo}')
-                    print(f'✅ Notificación guardada: {nuevo_nombre}')
+                    print(f'[OK] Notificación guardada: {nuevo_nombre}')
         except Exception as e:
             logging.error(f"Error procesando mensaje {msg['id']}: {e}")
 

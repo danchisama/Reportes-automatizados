@@ -4,6 +4,26 @@ Este documento resume la evolución del sistema, los problemas detectados y las 
 
 ---
 
+## [2026-04-16] - Correcciones de Ingesta y Nuevo Módulo de Análisis
+
+### Problema: Correos/Archivos Duplicados
+*   **Descripción**: El sistema estaba descargando dos veces el mismo archivo porque el proveedor enviaba informes idénticos que generaban duplicidad al depender del `attachment_id` dinámico.
+*   **Solución**: Se modificó `raw_report.py` para usar el nombre del archivo (`filename`) junto al `msg['id']` como llave única, evitando la descarga redundante de reportes.
+
+### Problema: Reporte de local "Juan Arona" sin columna de Tienda
+*   **Descripción**: Cuando el reporte del proveedor llegaba con datos de una sola tienda (Juan Arona), omitía la columna "Unidad", generando un archivo de 2 líneas que rompía la sintaxis y no era mapeado al local correspondiente.
+*   **Solución**: Se añadió lógica defensiva en `processed_report.py` para detectar automáticamente la ausencia de esta columna en archivos pequeños e inyectar el identificador `"Juan Arona Oficinas administrativas"`.
+
+### Nueva Funcionalidad: Módulo de Evaluación de Métricas (`evaluacion.py`)
+*   **Descripción**: Se creó un script estadístico que procesa la historia completa de reportes.
+*   **Características**:
+    - **a)** Porcentaje de sucursales que omiten el armado al final del día.
+    - **b)** Porcentaje de sucursales que dependen del Centro de Control para su armado.
+    - **c)** Tabla resumen y Ranking Top 15 de sucursales con mayores incidencias.
+    - **d)** Conclusiones clave (bullets) para comités operativos enfocados en el reentrenamiento de personal.
+
+---
+
 ## [2026-03-04] - Robustez y Alertas en Tiempo Real
 
 ### Problema: Reportes Incompletos por Retraso de Correos

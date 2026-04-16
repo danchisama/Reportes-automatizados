@@ -49,7 +49,8 @@ def configurar_logging(ruta_log):
             filename=ruta_log,
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
-            force=True
+            force=True,
+            encoding='utf-8'
         )
     except PermissionError:
         timestamp = datetime.now().strftime('%H%M%S')
@@ -59,7 +60,8 @@ def configurar_logging(ruta_log):
             filename=ruta_alt,
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
-            force=True
+            force=True,
+            encoding='utf-8'
         )
 
 configurar_logging(LOG_PATH)
@@ -214,7 +216,7 @@ def main():
     logging.info("Iniciando procesamiento de reportes refined...")
     
     if not os.path.exists(TOKEN_PATH):
-        print(f"[ERROR] No se encontr token.json")
+        print(f"[ERROR] No se encontró token.json")
         return
         
     notifier = GmailNotifier(TOKEN_PATH)
@@ -243,9 +245,6 @@ def main():
             archivos_csv = [os.path.join(RAW_DIARIOS_DIR, f) for f in os.listdir(RAW_DIARIOS_DIR) 
                            if f.endswith('.csv') and f.startswith(fecha_str.replace('-', ''))]
             
-            # Filtro adicional: solo archivos del día (basado en el nombre que pone raw_report.py)
-            # El nombre es YYYYMMDD_HHMMSS_filename.csv
-            
             if len(archivos_csv) >= ARCHIVOS_ESPERADOS:
                 print(f"[*] Archivos encontrados: {len(archivos_csv)}/{ARCHIVOS_ESPERADOS}")
                 break
@@ -253,8 +252,9 @@ def main():
             # Verificar si ya pasaron las 7:30 AM para avisar por Telegram (si no es manual)
             ahora = datetime.now()
             if not usar_manual and ahora.hour == 7 and ahora.minute >= 30 and not notifico_falta:
-                msg_aviso = f"⚠️ *ATENCIÓN*: El sistema sigue esperando archivos del día ({len(archivos_csv)}/{ARCHIVOS_ESPERADOS}) a las {ahora.strftime('%H:%M')}. El reporte se retrasará."
-                telegram.send_message(msg_aviso)
+                msg_aviso = f"ALERTA: El sistema sigue esperando archivos del día ({len(archivos_csv)}/{ARCHIVOS_ESPERADOS}) a las {ahora.strftime('%H:%M')}. El reporte se retrasará."
+                telegram.send_message(f"⚠️ *ATENCIÓN*: {msg_aviso}") # Emoji solo para Telegram
+                print(f"[!] {msg_aviso}")
                 notifico_falta = True
             
             # Verificar timeout total
@@ -265,6 +265,7 @@ def main():
             print(f"[*] Esperando archivos diarios del {fecha_str}... ({len(archivos_csv)}/{ARCHIVOS_ESPERADOS}). Reintento en {INTERVALO_REINTENTO}s...")
             time.sleep(INTERVALO_REINTENTO)
         
+        # 2. Cargar archivos diarios (.csv)
         dfs = []
         for f in archivos_csv:
             try:
@@ -281,13 +282,17 @@ def main():
                 col_map = {"Unidad": "Tienda", "Local": "Tienda", "unidad": "Tienda", "local": "Tienda"}
                 df_temp = df_temp.rename(columns=col_map)
                 
+                if "Tienda" not in df_temp.columns:
+                    # Cuando llega el reporte sin la columna Unidad, corresponde a:
+                    df_temp["Tienda"] = "Juan Arona Oficinas administrativas"
+                
                 if not df_temp.empty:
                     dfs.append(df_temp)
                     print(f"[*] Cargado CSV: {os.path.basename(f)} ({len(df_temp)} filas)")
             except Exception as e:
                 logging.error(f"Error leyendo {f}: {e}")
 
-        # 2. Procesar Midnight (Texto)
+        # 3. Cargar notificaciones de medianoche (.txt)
         processor = MidnightProcessor()
         midnight_data = processor.procesar_carpeta(RAW_MIDNIGHT_DIR)
         
@@ -305,11 +310,11 @@ def main():
         df_total = pd.concat(dfs, ignore_index=True)
         print(f"[*] Total registros cargados: {len(df_total)}")
         
-        # 4. Limpiar y Normalizar (incluye parsing de Fecha_DT)
+        # 4. Limpiar y Normalizar datos (incluye parsing de Fecha_DT)
         df_total = limpiar_y_normalizar(df_total)
         print(f"[*] Registros tras limpieza: {len(df_total)}")
         
-        # 5. FILTRO DE VENTANA OPERACIONAL
+        # 5. Aplicar filtro de ventana operacional (ciclo nocturno)
         target_dt = datetime.strptime(fecha_str, '%Y-%m-%d').date()
         prev_dt = target_dt - timedelta(days=1)
         
@@ -327,13 +332,13 @@ def main():
             logging.warning(f"No hay registros en la ventana del {prev_dt} al {target_dt} (madrugada)")
             raise Exception(f"No se encontraron eventos para el ciclo operacional del {prev_dt}")
 
-        # 6. Aplicar lógica de negocio
+        # 6. Aplicar lógica de negocio (primer desarmado / último armado)
         df_final = seleccionar_eventos_primero_ultimo(df_operacional)
         
         if df_final.empty:
-            raise Exception("El filtrado de negocio result en un reporte vaco.")
+            raise Exception("El filtrado de negocio resultó en un reporte vacío.")
 
-        # 7. Formatear Columnas Finales
+        # 7. Formatear y exportar reporte final (.csv)
         df_export = pd.DataFrame()
         # Formato: Fecha, Hora (con espacio tras la coma en el reporte final deseado)
         df_export['Fecha'] = df_final['Fecha_DT'].dt.strftime('%d/%m/%Y')
@@ -361,7 +366,7 @@ def main():
         logging.info(f"Reporte generado exitosamente: {ruta_salida}")
         print(f"[OK] Reporte generado: {nombre_salida}")
 
-        # 6. Subir a SFTP (respetando test_mode)
+        # 8. Subir a SFTP y enviar notificaciones de éxito
         uploader = SFTPUploader(CONFIG_PATH)
         if uploader.subir_archivo(ruta_salida):
             file_count = len(df_export)
@@ -380,10 +385,10 @@ def main():
             raise Exception("Error en la subida SFTP")
 
     except Exception as e:
-        error_msg = f"❌ *Error en el proceso*: {str(e)}"
+        error_msg = f"Error en el proceso: {str(e)}"
         logging.error(error_msg)
         print(f"[ERROR] {error_msg}")
-        notifier.enviar_alerta(EMAIL_NOTIFICACION, f"[!] ERROR Reporte DC", error_msg)
+        notifier.enviar_alerta(EMAIL_NOTIFICACION, f"[!] ERROR Reporte DC", f"❌ {error_msg}")
         notion.log_execution("Fallido", error_msg, 0)
         
         # Obtener el objeto telegram localmente si falló antes de su creación

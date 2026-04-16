@@ -31,3 +31,14 @@ class TelegramNotifier:
         except Exception as e:
             logging.error(f"[ERROR] Telegram: {str(e)}")
             return False
+
+if __name__ == "__main__":
+    # Prueba rápida: Cargar dotenv para poder testear directo desde aquí
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except:
+        pass
+
+    notifier = TelegramNotifier()
+    notifier.send_message("🚀 *Prueba de Sistema*: ¡Conexión con el bot establecida correctamente!")

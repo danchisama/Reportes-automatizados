@@ -47,7 +47,7 @@ class NotionSync:
             "parent": {"database_id": self.database_id},
             "properties": {
                 "Nombre": {
-                    "title": [{"text": {"content": f"Ejeución - {datetime.now().strftime('%Y-%m-%d %H:%M')}"}}]
+                    "title": [{"text": {"content": f"Ejecución - {datetime.now().strftime('%Y-%m-%d %H:%M')}"}}]
                 },
                 "Estado": {
                     "select": {"name": status}
