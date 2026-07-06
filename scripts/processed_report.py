@@ -38,7 +38,7 @@ LOG_PATH = os.path.join(LOG_DIR, 'procesamiento.log')
 EMAIL_NOTIFICACION = 'dante.u.o@gmail.com' 
 ARCHIVOS_ESPERADOS = 3
 INTERVALO_REINTENTO = 300 # 5 minutos
-TIMEOUT_MAXIMO = 3600 * 3 # 3 horas
+TIMEOUT_MAXIMO = 3600 * 5 # 5 horas
 MINIMO_FILAS_REPORTE = 50 # Umbral para alertar sobre reporte sospechosamente pequeño
 # =========================================================
 
@@ -259,8 +259,16 @@ def main():
             
             # Verificar timeout total
             if (time.time() - inicio_espera) > TIMEOUT_MAXIMO:
-                logging.warning("Se alcanzó el tiempo máximo de espera sin encontrar todos los archivos.")
-                break
+                msg_error = "CRÍTICO: Timeout alcanzado. No se recibieron los 3 archivos. Abortando proceso."
+                logging.error(msg_error)
+                print(f"[ERROR] {msg_error}")
+                
+                # Notificar antes de salir
+                telegram.send_message(f"❌ {msg_error}")
+                notifier.enviar_alerta(EMAIL_NOTIFICACION, "[!] ERROR CRÍTICO - Reporte Incompleto", msg_error)
+                
+                # Salir del programa completamente para evitar enviar data incompleta
+                return
                 
             print(f"[*] Esperando archivos diarios del {fecha_str}... ({len(archivos_csv)}/{ARCHIVOS_ESPERADOS}). Reintento en {INTERVALO_REINTENTO}s...")
             time.sleep(INTERVALO_REINTENTO)
@@ -370,13 +378,16 @@ def main():
         uploader = SFTPUploader(CONFIG_PATH)
         if uploader.subir_archivo(ruta_salida):
             file_count = len(df_export)
-            
+
+            # BLOQUEO DE ENVÍO SI LA DATA ES INSUFICIENTE
+            if file_count < MINIMO_FILAS_REPORTE:
+                error_data = f"❌ Reporte abortado: Contiene solo {file_count} filas (umbral: {MINIMO_FILAS_REPORTE})."
+                telegram.send_message(error_data)
+                notifier.enviar_alerta(EMAIL_NOTIFICACION, "[!] ERROR DE DATA", error_data)
+                return # Evita continuar con el resto del flujo de envío
+
             # Notificaciones de éxito
             msg_exito = f"✅ *Reporte Generado*: `{nombre_salida}`\n📊 Registros: `{file_count}`\n📂 Subido a SFTP correctamente."
-            
-            # Alerta si el reporte es muy pequeño
-            if file_count < MINIMO_FILAS_REPORTE:
-                msg_exito += f"\n\n⚠️ *AVISO*: El reporte parece muy pequeño ({file_count} filas). Por favor verifique si faltan datos diarios."
             
             notifier.enviar_alerta(EMAIL_NOTIFICACION, f"[OK] Exito Reporte DC - {fecha_str}", msg_exito)
             notion.log_execution("Exitoso", f"Reporte {fecha_str} subido con {file_count} filas.", file_count)
